@@ -1607,19 +1607,30 @@ impl<'gc> MovieLoader<'gc> {
         Ok(())
     }
 
-    /// Load data into a movie loader.
-    fn movie_loader_data(
-        handle: LoaderHandle,
-        uc: &mut UpdateContext<'gc>,
-        data: &[u8],
-        url: String,
-        status: u16,
-        redirected: bool,
-        loader_url: Option<String>,
-    ) -> Result<(), Error> {
-        let sniffed_type = ContentType::sniff(data);
-        let length = data.len();
+fn movie_loader_data(
+    handle: LoaderHandle,
+    uc: &mut UpdateContext<'gc>,
+    data: &[u8],
+    url: String,
+    status: u16,
+    redirected: bool,
+    loader_url: Option<String>,
+) -> Result<(), Error> {
+    // 修复协议相对 URL
+    let url = if url.starts_with("//") {
+        format!("https:{}", url)
+    } else {
+        url
+    };
+    let loader_url = loader_url.map(|u| {
+        if u.starts_with("//") {
+            format!("https:{}", u)
+        } else {
+            u
+        }
+    });
 
+    let sniffed_type = ContentType::sniff(data);
         if sniffed_type == ContentType::Unknown
             && let Ok(data) = extract_swz(data)
         {
