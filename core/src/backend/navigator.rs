@@ -138,12 +138,19 @@ pub struct Request {
     /// the order of headers.
     headers: IndexMap<String, String>,
 }
-
 impl Request {
+    /// 辅助函数：修正 `file://` 网络地址为 `https://`
+    fn fix_url(mut url: String) -> String {
+        if url.starts_with("file://") && !url.starts_with("file:///") {
+            url = url.replace("file://", "https://");
+        }
+        url
+    }
+
     /// Construct a GET request.
     pub fn get(url: String) -> Self {
         Self {
-            url,
+            url: Self::fix_url(url),
             method: NavigationMethod::Get,
             body: None,
             headers: Default::default(),
@@ -153,7 +160,7 @@ impl Request {
     /// Construct a POST request.
     pub fn post(url: String, body: Option<(Vec<u8>, String)>) -> Self {
         Self {
-            url,
+            url: Self::fix_url(url),
             method: NavigationMethod::Post,
             body,
             headers: Default::default(),
@@ -164,12 +171,13 @@ impl Request {
     #[expect(clippy::self_named_constructors)]
     pub fn request(method: NavigationMethod, url: String, body: Option<(Vec<u8>, String)>) -> Self {
         Self {
-            url,
+            url: Self::fix_url(url),
             method,
             body,
             headers: Default::default(),
         }
     }
+
 
     /// Retrieve the URL of this request.
     pub fn url(&self) -> &str {
