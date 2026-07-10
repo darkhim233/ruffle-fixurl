@@ -1628,6 +1628,7 @@ fn movie_loader_data(
     });
 
     let sniffed_type = ContentType::sniff(data);
+    let length = data.len();
         if sniffed_type == ContentType::Unknown
             && let Ok(data) = extract_swz(data)
         {
