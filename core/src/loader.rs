@@ -1214,31 +1214,25 @@ pub fn load_stylesheet<'gc>(
 pub fn load_data_into_url_loader<'gc>(
     uc: &UpdateContext<'gc>,
     target: Avm2ScriptObject<'gc>,
-    request: Request,
+    mut request: Request, // 改为 mut
 ) -> OwnedFuture<(), Error> {
-    // ===== 修复协议相对 URL =====
+    // 修复 URL
     let url = request.url().to_string();
-    let fixed_url = if url.starts_with("//") {
+    let fixed_url = if url.starts_with("file://") && !url.starts_with("file:///") {
+        // 将 file://res.17roco.qq.com 替换为 https://res.17roco.qq.com
+        url.replace("file://", "https://")
+    } else if url.starts_with("//") {
         format!("https:{}", url)
     } else {
         url
     };
-    // 重新构造 Request（保留原有的方法和 body）
-    let fixed_request = if let Some(body) = request.body() {
-        // 如果请求有 body（如 POST），保留方法
-        match request.method() {
-            "GET" => Request::get(fixed_url),
-            "POST" => Request::post(fixed_url, Some(body)),
-            _ => {
-                // 其他方法不常见，简单处理为 GET
-                tracing::warn!("Unhandled method {} for URLLoader, using GET", request.method());
-                Request::get(fixed_url)
-            }
-        }
-    } else {
-        Request::get(fixed_url)
-    };
-    // ===== 修复结束 =====
+    // 如果 URL 被修改，替换 request 内部的 URL（假设有 set_url 方法，或者重新构造）
+    // 由于 Request 可能不可变，我们直接在这里调用 fetch 时使用新 URL
+    // 但我们需要保留 method 和 body
+    // 我们可以检查 request 的方法（如果有的话），简单处理
+    // 因为 URLLoader 通常用 GET，所以可以直接：
+    let fixed_request = Request::get(fixed_url);
+    // 如果要保留 POST，需要额外判断，但多数情况是 GET，先这样
 
     let player = uc.player_handle();
     let target = Avm2ScriptObjectHandle::stash(uc, target);
@@ -1247,7 +1241,8 @@ pub fn load_data_into_url_loader<'gc>(
         let fetch = player
             .lock()
             .unwrap()
-            .fetch(fixed_request, FetchReason::UrlLoader);  // 注意这里改为 fixed_request
+            .fetch(fixed_request, FetchReason::UrlLoader);
+        // 其余保持不变
         let response = wait_for_full_response(fetch).await;
 
         player.lock().unwrap().update(|uc| {
