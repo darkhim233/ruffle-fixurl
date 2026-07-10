@@ -2510,11 +2510,16 @@ impl Player {
         });
     }
 
-    pub fn fetch(
-        &self,
-        mut request: Request,
-        fetch_reason: FetchReason,
-    ) -> OwnedFuture<Box<dyn SuccessResponse>, ErrorResponse> {
+pub fn fetch(&self, request: Request, reason: FetchReason) -> OwnedFuture<Box<dyn SuccessResponse>, ErrorResponse> {
+    // 修正URL
+    let url = request.url().to_string();
+    let fixed_url = if url.starts_with("file://") && !url.starts_with("file:///") {
+        url.replace("file://", "https://")
+    } else if url.starts_with("//") {
+        format!("https:{}", url)
+    } else {
+        url
+    };
         match self.compatibility_rules.block_or_rewrite_swf_url(
             request.url().into(),
             UrlRewriteStage::BeforeRequest,
