@@ -1216,6 +1216,30 @@ pub fn load_data_into_url_loader<'gc>(
     target: Avm2ScriptObject<'gc>,
     request: Request,
 ) -> OwnedFuture<(), Error> {
+    // ===== 修复协议相对 URL =====
+    let url = request.url().to_string();
+    let fixed_url = if url.starts_with("//") {
+        format!("https:{}", url)
+    } else {
+        url
+    };
+    // 重新构造 Request（保留原有的方法和 body）
+    let fixed_request = if let Some(body) = request.body() {
+        // 如果请求有 body（如 POST），保留方法
+        match request.method() {
+            "GET" => Request::get(fixed_url),
+            "POST" => Request::post(fixed_url, Some(body)),
+            _ => {
+                // 其他方法不常见，简单处理为 GET
+                tracing::warn!("Unhandled method {} for URLLoader, using GET", request.method());
+                Request::get(fixed_url)
+            }
+        }
+    } else {
+        Request::get(fixed_url)
+    };
+    // ===== 修复结束 =====
+
     let player = uc.player_handle();
     let target = Avm2ScriptObjectHandle::stash(uc, target);
 
@@ -1223,7 +1247,7 @@ pub fn load_data_into_url_loader<'gc>(
         let fetch = player
             .lock()
             .unwrap()
-            .fetch(request, FetchReason::UrlLoader);
+            .fetch(fixed_request, FetchReason::UrlLoader);  // 注意这里改为 fixed_request
         let response = wait_for_full_response(fetch).await;
 
         player.lock().unwrap().update(|uc| {
