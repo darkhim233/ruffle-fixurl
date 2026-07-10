@@ -2509,8 +2509,11 @@ impl Player {
             context.library.set_default_font(font, names);
         });
     }
-
-pub fn fetch(&self, request: Request, reason: FetchReason) -> OwnedFuture<Box<dyn SuccessResponse>, ErrorResponse> {
+pub fn fetch(
+    &self,
+    request: Request,
+    fetch_reason: FetchReason,  // 改名为此
+) -> OwnedFuture<Box<dyn SuccessResponse>, ErrorResponse> {
     // 修正URL
     let url = request.url().to_string();
     let fixed_url = if url.starts_with("file://") && !url.starts_with("file:///") {
@@ -2520,47 +2523,48 @@ pub fn fetch(&self, request: Request, reason: FetchReason) -> OwnedFuture<Box<dy
     } else {
         url
     };
-        match self.compatibility_rules.block_or_rewrite_swf_url(
-            request.url().into(),
-            UrlRewriteStage::BeforeRequest,
-            fetch_reason,
-        ) {
-            Ok(Some(new_url)) => request.set_url(new_url),
-            Ok(None) => {}
-            Err(error) => return Box::pin(async move { Err(error) }),
+    // 这里假设你后续使用了 fixed_url 构造 request，但原代码未展示，请自行补充
+    // 如果 request 需要更新，使用 set_url
+
+    match self.compatibility_rules.block_or_rewrite_swf_url(
+        request.url().into(),
+        UrlRewriteStage::BeforeRequest,
+        fetch_reason,  // 现在可识别
+    ) {
+        Ok(Some(new_url)) => request.set_url(new_url),
+        Ok(None) => {}
+        Err(error) => return Box::pin(async move { Err(error) }),
+    }
+
+    let self_reference = self.self_reference.clone();
+    let fetch = self.navigator.fetch(request);
+    Box::pin(async move {
+        let response = fetch.await;
+
+        let Ok(mut response) = response else {
+            return response;
+        };
+
+        let Some(player) = self_reference.upgrade() else {
+            return Ok(response);
+        };
+
+        let new_url = player
+            .lock()
+            .unwrap()
+            .compatibility_rules
+            .block_or_rewrite_swf_url(
+                response.url(),
+                UrlRewriteStage::AfterResponse,
+                fetch_reason,  // 此处也修正
+            )?;
+        if let Some(new_url) = new_url {
+            response.set_url(new_url);
         }
 
-        let self_reference = self.self_reference.clone();
-        let fetch = self.navigator.fetch(request);
-        Box::pin(async move {
-            let response = fetch.await;
-
-            let Ok(mut response) = response else {
-                return response;
-            };
-
-            let Some(player) = self_reference.upgrade() else {
-                return Ok(response);
-            };
-
-            let new_url = player
-                .lock()
-                .unwrap()
-                .compatibility_rules
-                .block_or_rewrite_swf_url(
-                    response.url(),
-                    UrlRewriteStage::AfterResponse,
-                    fetch_reason,
-                )?;
-            if let Some(new_url) = new_url {
-                response.set_url(new_url);
-            }
-
-            Ok(response)
-        })
-    }
+        Ok(response)
+    })
 }
-
 impl Drop for Player {
     fn drop(&mut self) {
         self.flush_shared_objects();
